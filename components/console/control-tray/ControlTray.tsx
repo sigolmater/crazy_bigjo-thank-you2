@@ -7,7 +7,6 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -35,6 +34,7 @@ function ControlTray({ children }: ControlTrayProps) {
   const [audioRecorder] = useState(() => new AudioRecorder());
   const [muted, setMuted] = useState(false);
   const connectButtonRef = useRef<HTMLButtonElement>(null);
+  const hasTurns = useLogStore(state => state.turns.length > 0);
 
   const { client, connected, connect, disconnect } = useLiveAPIContext();
 
@@ -137,6 +137,7 @@ function ControlTray({ children }: ControlTrayProps) {
         className="action-button export-logs-button"
         onClick={handleExportLogs}
         aria-label="Export Logs"
+        disabled={!hasTurns}
       >
         <span className="icon">save</span>
       </button>

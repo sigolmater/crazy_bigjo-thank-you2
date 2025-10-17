@@ -878,7 +878,7 @@ header .export-button {
   padding: 24px;
   position: relative;
   width: 100%;
-  max-width: 600px;
+  max-width: 500px;
   max-height: 90vh;
   overflow: auto;
   margin: 20px;
@@ -1045,72 +1045,6 @@ header .export-button {
 }
 
 .memory-inspector-modal .close-inspector-button:hover {
-  background-color: var(--gray-700);
-}
-
-.memory-reconstruction-modal h2,
-.thought-completion-modal h2 {
-  margin-bottom: 12px;
-}
-
-.memory-reconstruction-modal .description,
-.thought-completion-modal .description {
-  font-size: 14px;
-  color: var(--gray-300);
-  line-height: 1.5;
-  margin-bottom: 20px;
-}
-
-.memory-reconstruction-modal .reconstruction-content,
-.thought-completion-modal .completion-content {
-  background-color: var(--gray-1000);
-  border: 1px solid var(--gray-800);
-  border-radius: 8px;
-  max-height: 50vh;
-  overflow: auto;
-  padding: 16px;
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.memory-reconstruction-modal .reconstruction-content h3,
-.thought-completion-modal .completion-content h3 {
-  font-size: 16px;
-  font-weight: bold;
-  color: var(--accent-blue-headers);
-  margin-top: 16px;
-  margin-bottom: 8px;
-}
-.memory-reconstruction-modal .reconstruction-content h3:first-child,
-.thought-completion-modal .completion-content h3:first-child {
-  margin-top: 0;
-}
-
-.memory-reconstruction-modal .reconstruction-content strong,
-.thought-completion-modal .completion-content strong {
-  font-weight: bold;
-  color: var(--text);
-}
-
-.memory-reconstruction-modal .modal-actions,
-.thought-completion-modal .modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.memory-reconstruction-modal .close-reconstruction-button,
-.thought-completion-modal .close-completion-button {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 500;
-  background-color: var(--gray-800);
-  transition: background-color 0.2s;
-}
-
-.memory-reconstruction-modal .close-reconstruction-button:hover,
-.thought-completion-modal .close-completion-button:hover {
   background-color: var(--gray-700);
 }
 
@@ -1310,7 +1244,7 @@ form button:first-of-type {
   gap: 8px;
 }
 
-.memory-action-button {
+.inspect-memory-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1326,11 +1260,11 @@ form button:first-of-type {
   transition: background-color 0.2s;
 }
 
-.memory-action-button:hover:not(:disabled) {
+.inspect-memory-button:hover:not(:disabled) {
   background-color: var(--gray-800);
 }
 
-.memory-action-button:disabled {
+.inspect-memory-button:disabled {
   color: var(--gray-500);
   cursor: not-allowed;
 }

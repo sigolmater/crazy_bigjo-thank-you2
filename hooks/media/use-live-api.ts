@@ -11,7 +11,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
+ * Unless required by applicable law of or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
@@ -20,11 +20,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GenAILiveClient } from '../../lib/genai-live-client';
-import { LiveConnectConfig, Modality, LiveServerToolCall } from '@google/genai';
+import {
+  LiveConnectConfig,
+  Modality,
+  LiveServerToolCall,
+  GoogleGenAI,
+} from '@google/genai';
 import { AudioStreamer } from '../../lib/audio-streamer';
 import { audioContext } from '../../lib/utils';
 import VolMeterWorket from '../../lib/worklets/vol-meter';
-import { useLogStore, useSettings } from '@/lib/state';
+import { useLogStore, useSettings, useUI } from '@/lib/state';
 
 export type UseLiveApiResults = {
   client: GenAILiveClient;
@@ -36,6 +41,8 @@ export type UseLiveApiResults = {
   connected: boolean;
 
   volume: number;
+
+  generateText: (prompt: string) => Promise<string>;
 };
 
 export function useLiveApi({
@@ -78,6 +85,36 @@ export function useLiveApi({
     }
   }, [audioStreamerRef]);
 
+  const connect = useCallback(async () => {
+    if (!config) {
+      throw new Error('config has not been set');
+    }
+    client.disconnect();
+    await client.connect(config);
+  }, [client, config]);
+
+  const disconnect = useCallback(async () => {
+    client.disconnect();
+    setConnected(false);
+  }, [setConnected, client]);
+
+  const generateText = useCallback(
+    async (prompt: string): Promise<string> => {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        return response.text;
+      } catch (e) {
+        console.error('Error generating text:', e);
+        return 'An error occurred while trying to generate a response.';
+      }
+    },
+    [apiKey],
+  );
+
   useEffect(() => {
     const onOpen = () => {
       setConnected(true);
@@ -99,11 +136,92 @@ export function useLiveApi({
       }
     };
 
+    const onInputTranscription = (text: string, isFinal: boolean) => {
+      if (!isFinal) return;
+
+      const command = text.toLowerCase().trim().replace(/[.,?]/g, '');
+      const originalText = text.trim();
+
+      const addLog = (text: string) => {
+        useLogStore.getState().addTurn({ role: 'system', text, isFinal: true });
+      };
+
+      const rememberPrefixes = [
+        'remember this',
+        'make a note',
+        '이것을 기억해', // "remember this"
+        '메모해 둬', // "make a note of it"
+      ];
+
+      for (const prefix of rememberPrefixes) {
+        if (originalText.toLowerCase().startsWith(prefix)) {
+          let contentToRemember = originalText.substring(prefix.length).trim();
+          if (contentToRemember.startsWith(':')) {
+            contentToRemember = contentToRemember.substring(1).trim();
+          }
+
+          if (contentToRemember) {
+            useSettings.getState().appendToCoreMemory(contentToRemember);
+            addLog(`Added to Core Memory: "${contentToRemember}"`);
+            return; // Command handled, exit early
+          }
+        }
+      }
+
+      const openSettingsCommands = ['open settings', 'show settings'];
+      const closeSettingsCommands = ['close settings', 'hide settings'];
+      const startCommands = ['start stream', 'connect', 'start connection'];
+      const stopCommands = ['stop stream', 'disconnect', 'end connection', 'stop'];
+      const recallCommands = [
+        'what did i say',
+        'what did i just say',
+        'unable to recall what i stated',
+        'repeat that',
+      ];
+
+      const { isSidebarOpen, toggleSidebar } = useUI.getState();
+
+      if (openSettingsCommands.includes(command)) {
+        if (!isSidebarOpen) {
+          toggleSidebar();
+          addLog(`Voice command recognized: "${command}"`);
+        }
+      } else if (closeSettingsCommands.includes(command)) {
+        if (isSidebarOpen) {
+          toggleSidebar();
+          addLog(`Voice command recognized: "${command}"`);
+        }
+      } else if (startCommands.includes(command)) {
+        if (!connected) {
+          connect();
+          addLog(`Voice command recognized: "${command}"`);
+        }
+      } else if (stopCommands.includes(command)) {
+        if (connected) {
+          disconnect();
+          addLog(`Voice command recognized: "${command}"`);
+        }
+      } else if (recallCommands.includes(command)) {
+        addLog(`Voice command recognized: "${command}"`);
+        const { turns } = useLogStore.getState();
+        const lastUserTurn = [...turns]
+          .reverse()
+          .find(turn => turn.role === 'user' && turn.isFinal);
+
+        if (lastUserTurn) {
+          addLog(`You said: "${lastUserTurn.text}"`);
+        } else {
+          addLog("I don't have a record of what you last said.");
+        }
+      }
+    };
+
     // Bind event listeners
     client.on('open', onOpen);
     client.on('close', onClose);
     client.on('interrupted', stopAudioStreamer);
     client.on('audio', onAudio);
+    client.on('inputTranscription', onInputTranscription);
 
     const onToolCall = (toolCall: LiveServerToolCall) => {
       const functionResponses: any[] = [];
@@ -153,21 +271,9 @@ export function useLiveApi({
       client.off('interrupted', stopAudioStreamer);
       client.off('audio', onAudio);
       client.off('toolcall', onToolCall);
+      client.off('inputTranscription', onInputTranscription);
     };
-  }, [client]);
-
-  const connect = useCallback(async () => {
-    if (!config) {
-      throw new Error('config has not been set');
-    }
-    client.disconnect();
-    await client.connect(config);
-  }, [client, config]);
-
-  const disconnect = useCallback(async () => {
-    client.disconnect();
-    setConnected(false);
-  }, [setConnected, client]);
+  }, [client, connected, connect, disconnect]);
 
   return {
     client,
@@ -177,5 +283,6 @@ export function useLiveApi({
     connected,
     disconnect,
     volume,
+    generateText,
   };
 }

@@ -80,10 +80,14 @@ export class GenAILiveClient {
   protected readonly client: GoogleGenAI;
   protected session?: Session;
 
-  private _status: 'connected' | 'disconnected' | 'connecting' = 'disconnected';
+  private _status: 'connected' | 'disconnected' | 'connecting' =
+    'disconnected';
   public get status() {
     return this._status;
   }
+
+  private currentTurnInputTranscription: string | null = null;
+  private hadOutputTranscriptionThisTurn: boolean = false;
 
   /**
    * Creates a new GenAILiveClient instance.
@@ -136,6 +140,8 @@ export class GenAILiveClient {
   }
 
   public disconnect() {
+    this.currentTurnInputTranscription = null;
+    this.hadOutputTranscriptionThisTurn = false;
     this.session?.close();
     this.session = undefined;
     this._status = 'disconnected';
@@ -220,22 +226,18 @@ export class GenAILiveClient {
       }
 
       if (serverContent.inputTranscription) {
-        this.emitter.emit(
-          'inputTranscription',
-          serverContent.inputTranscription.text,
-          serverContent.inputTranscription.isFinal ?? false,
-        );
-        this.log(
-          'server.inputTranscription',
-          serverContent.inputTranscription.text,
-        );
+        const text = serverContent.inputTranscription.text;
+        this.currentTurnInputTranscription = text;
+        this.emitter.emit('inputTranscription', text, false);
+        this.log('server.inputTranscription', text);
       }
 
       if (serverContent.outputTranscription) {
+        this.hadOutputTranscriptionThisTurn = true;
         this.emitter.emit(
           'outputTranscription',
           serverContent.outputTranscription.text,
-          serverContent.outputTranscription.isFinal ?? false,
+          false,
         );
         this.log(
           'server.outputTranscription',
@@ -289,6 +291,27 @@ export class GenAILiveClient {
       }
 
       if (serverContent.turnComplete) {
+        if (this.currentTurnInputTranscription) {
+          this.emitter.emit(
+            'inputTranscription',
+            this.currentTurnInputTranscription,
+            true,
+          );
+          this.log(
+            'client.inputTranscription.final',
+            this.currentTurnInputTranscription,
+          );
+        }
+
+        if (this.hadOutputTranscriptionThisTurn) {
+          this.emitter.emit('outputTranscription', '', true);
+          this.log('client.outputTranscription.final', '');
+        }
+
+        // Reset for the next turn
+        this.currentTurnInputTranscription = null;
+        this.hadOutputTranscriptionThisTurn = false;
+
         this.log('server.send', 'turnComplete');
         this.emitter.emit('turncomplete');
       }
@@ -310,6 +333,8 @@ export class GenAILiveClient {
   }
 
   protected onClose(e: CloseEvent) {
+    this.currentTurnInputTranscription = null;
+    this.hadOutputTranscriptionThisTurn = false;
     this._status = 'disconnected';
     let reason = e.reason || '';
     if (reason.toLowerCase().includes('error')) {
@@ -322,7 +347,7 @@ export class GenAILiveClient {
 
     this.log(
       `server.${e.type}`,
-      `disconnected ${reason ? `with reason: ${reason}` : ``}`
+      `disconnected ${reason ? `with reason: ${reason}` : ``}`,
     );
     this.emitter.emit('close', e);
   }

@@ -55,6 +55,10 @@ const WelcomeScreen: React.FC = () => {
           </div>
         </div>
         <p>{description}</p>
+        <p className="voice-commands-hint">
+          Try voice commands like "open settings", "start stream", or "what did I
+          say?".
+        </p>
         <div className="example-prompts">
           {prompts.map((prompt, index) => (
             <div key={index} className="prompt">{prompt}</div>

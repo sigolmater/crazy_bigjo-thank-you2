@@ -61,6 +61,12 @@
   margin-bottom: 30px;
 }
 
+.voice-commands-hint {
+  font-size: 14px;
+  color: var(--gray-300);
+  margin-top: -15px;
+}
+
 .example-prompts {
   display: flex;
   justify-content: center;

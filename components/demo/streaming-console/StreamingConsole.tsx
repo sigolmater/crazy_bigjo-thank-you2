@@ -54,228 +54,127 @@ const renderContent = (text: string) => {
   });
 };
 
-
 export default function StreamingConsole() {
   const { client, setConfig } = useLiveAPIContext();
-  const { systemPrompt, voice } = useSettings();
+  const { systemPrompt, voice, coreMemory } = useSettings();
   const { tools } = useTools();
-  const turns = useLogStore(state => state.turns);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { turns, addTurn, updateLastTurn } = useLogStore();
   const [showPopUp, setShowPopUp] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleClosePopUp = () => {
-    setShowPopUp(false);
-  };
-
-  // Set the configuration for the Live API
   useEffect(() => {
-    const enabledTools = tools
-      .filter(tool => tool.isEnabled)
-      .map(tool => ({
-        functionDeclarations: [
-          {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters,
-          },
-        ],
-      }));
-
     const config: LiveConnectConfig = {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: voice,
-          },
+          prebuiltVoiceConfig: { voiceName: voice },
         },
       },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
-      systemInstruction: {
-        parts: [
-          {
-            text: systemPrompt,
-          },
-        ],
-      },
-      tools: enabledTools,
     };
 
+    const fullSystemInstruction = [
+      systemPrompt,
+      coreMemory ? `--- Core Memory ---\n${coreMemory}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    if (fullSystemInstruction) {
+      config.systemInstruction = fullSystemInstruction;
+    }
+
+    const enabledTools = tools.filter(tool => tool.isEnabled);
+    if (enabledTools.length > 0) {
+      config.tools = [
+        {
+          functionDeclarations: enabledTools.map(
+            ({ name, description, parameters, scheduling }) => ({
+              name,
+              description,
+              parameters,
+              scheduling,
+            }),
+          ),
+        },
+      ];
+    }
+
     setConfig(config);
-  }, [setConfig, systemPrompt, tools, voice]);
+  }, [systemPrompt, voice, tools, setConfig, coreMemory]);
 
   useEffect(() => {
-    const { addTurn, updateLastTurn } = useLogStore.getState();
+    const onInputTranscription = (text: string, isFinal: boolean) => {
+      const currentTurns = useLogStore.getState().turns;
+      const lastTurn =
+        currentTurns.length > 0 ? currentTurns[currentTurns.length - 1] : null;
 
-    const handleInputTranscription = (text: string, isFinal: boolean) => {
-      const turns = useLogStore.getState().turns;
-      const last = turns[turns.length - 1];
-      if (last && last.role === 'user' && !last.isFinal) {
-        updateLastTurn({
-          text: last.text + text,
-          isFinal,
-        });
+      if (lastTurn && lastTurn.role === 'user' && !lastTurn.isFinal) {
+        updateLastTurn({ text: lastTurn.text + text, isFinal });
       } else {
         addTurn({ role: 'user', text, isFinal });
       }
     };
 
-    const handleOutputTranscription = (text: string, isFinal: boolean) => {
-      const turns = useLogStore.getState().turns;
-      const last = turns[turns.length - 1];
-      if (last && last.role === 'agent' && !last.isFinal) {
-        updateLastTurn({
-          text: last.text + text,
-          isFinal,
-        });
+    const onOutputTranscription = (text: string, isFinal: boolean) => {
+      const currentTurns = useLogStore.getState().turns;
+      const lastTurn =
+        currentTurns.length > 0 ? currentTurns[currentTurns.length - 1] : null;
+
+      if (lastTurn && lastTurn.role === 'agent' && !lastTurn.isFinal) {
+        updateLastTurn({ text: lastTurn.text + text, isFinal });
       } else {
         addTurn({ role: 'agent', text, isFinal });
       }
     };
 
-    const handleContent = (serverContent: LiveServerContent) => {
-      const text =
-        serverContent.modelTurn?.parts
-          ?.map((p: Part) => p.text)
-          .filter(Boolean)
-          .join(' ') ?? '';
-      const groundingChunks = serverContent.groundingMetadata?.groundingChunks;
-
-      if (!text && !groundingChunks) return;
-
-      const turns = useLogStore.getState().turns;
-      const last = turns.at(-1);
-
-      if (last?.role === 'agent' && !last.isFinal) {
-        const updatedTurn: Partial<ConversationTurn> = {
-          text: last.text + text,
-        };
-        if (groundingChunks) {
-          updatedTurn.groundingChunks = [
-            ...(last.groundingChunks || []),
-            ...groundingChunks,
-          ];
+    const onContent = (content: LiveServerContent) => {
+      if (content.modelTurn) {
+        const textContent = content.modelTurn.parts
+          .map((part: Part) => ('text' in part ? part.text : ''))
+          .join(' ');
+        if (textContent) {
+          addTurn({ role: 'agent', text: textContent, isFinal: true });
         }
-        updateLastTurn(updatedTurn);
-      } else {
-        addTurn({ role: 'agent', text, isFinal: false, groundingChunks });
       }
     };
 
-    const handleTurnComplete = () => {
-      const last = useLogStore.getState().turns.at(-1);
-      if (last && !last.isFinal) {
-        updateLastTurn({ isFinal: true });
-      }
-    };
-
-    client.on('inputTranscription', handleInputTranscription);
-    client.on('outputTranscription', handleOutputTranscription);
-    client.on('content', handleContent);
-    client.on('turncomplete', handleTurnComplete);
+    client.on('inputTranscription', onInputTranscription);
+    client.on('outputTranscription', onOutputTranscription);
+    client.on('content', onContent);
 
     return () => {
-      client.off('inputTranscription', handleInputTranscription);
-      client.off('outputTranscription', handleOutputTranscription);
-      client.off('content', handleContent);
-      client.off('turncomplete', handleTurnComplete);
+      client.off('inputTranscription', onInputTranscription);
+      client.off('outputTranscription', onOutputTranscription);
+      client.off('content', onContent);
     };
-  }, [client]);
+  }, [client, addTurn, updateLastTurn]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [turns, searchQuery]);
+  }, [turns]);
 
-  const filteredTurns = turns.filter(turn =>
-    turn.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const hasTurns = turns.length > 0;
 
   return (
-    <div className="transcription-container">
-      {showPopUp && <PopUp onClose={handleClosePopUp} />}
-      {turns.length === 0 ? (
-        <WelcomeScreen />
-      ) : (
-        <div className="console-content-wrapper">
-          <div className="search-bar-container">
-            <span className="icon">search</span>
-            <input
-              type="text"
-              placeholder="Search logs..."
-              className="search-input"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search conversation logs"
-            />
-            {searchQuery && (
-              <button
-                className="clear-search-button"
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-              >
-                <span className="icon">close</span>
-              </button>
-            )}
+    <div className="streaming-console-inner" ref={scrollRef}>
+      {showPopUp && <PopUp onClose={() => setShowPopUp(false)} />}
+      {!hasTurns && !showPopUp && <WelcomeScreen />}
+      {turns.map((turn, index) => (
+        <div
+          key={`${turn.role}-${turn.timestamp.toISOString()}-${index}`}
+          className={`turn turn-${turn.role}`}
+        >
+          <div className="turn-header">
+            <span className="role">{turn.role}</span>
+            <span className="timestamp">{formatTimestamp(turn.timestamp)}</span>
           </div>
-          <div className="transcription-view" ref={scrollRef}>
-            {filteredTurns.length > 0 ? (
-              filteredTurns.map((t, i) => (
-                <div
-                  key={i}
-                  className={`transcription-entry ${t.role} ${!t.isFinal ? 'interim' : ''
-                    }`}
-                >
-                  <div className="transcription-header">
-                    <div className="transcription-source">
-                      {t.role === 'user'
-                        ? 'You'
-                        : t.role === 'agent'
-                          ? 'Agent'
-                          : 'System'}
-                    </div>
-                    <div className="transcription-timestamp">
-                      {formatTimestamp(t.timestamp)}
-                    </div>
-                  </div>
-                  <div className="transcription-text-content">
-                    {renderContent(t.text)}
-                  </div>
-                  {t.groundingChunks && t.groundingChunks.length > 0 && (
-                    <div className="grounding-chunks">
-                      <strong>Sources:</strong>
-                      <ul>
-                        {t.groundingChunks
-                          .filter(chunk => chunk.web)
-                          .map((chunk, index) => (
-                            <li key={index}>
-                              <a
-                                href={chunk.web!.uri}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {chunk.web!.title || chunk.web!.uri}
-                              </a>
-                            </li>
-                          ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              searchQuery && (
-                <div className="no-results-message">
-                  No logs found for "{searchQuery}"
-                </div>
-              )
-            )}
-          </div>
+          <div className="turn-content">{renderContent(turn.text)}</div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
