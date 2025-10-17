@@ -52,6 +52,13 @@ export function useLiveApi({
   const [connected, setConnected] = useState(false);
   const [config, setConfig] = useState<LiveConnectConfig>({});
 
+  // When the client instance changes (e.g. model change), disconnect the old one.
+  useEffect(() => {
+    return () => {
+      client.disconnect();
+    };
+  }, [client]);
+
   // register audio for streaming server -> speakers
   useEffect(() => {
     if (!audioStreamerRef.current) {

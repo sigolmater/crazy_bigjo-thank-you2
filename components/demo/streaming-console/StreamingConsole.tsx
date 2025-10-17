@@ -5,8 +5,12 @@
 import { useEffect, useRef, useState } from 'react';
 import PopUp from '../popup/PopUp';
 import WelcomeScreen from '../welcome-screen/WelcomeScreen';
-// FIX: Import LiveServerContent to correctly type the content handler.
-import { LiveConnectConfig, Modality, LiveServerContent } from '@google/genai';
+import {
+  LiveConnectConfig,
+  Modality,
+  LiveServerContent,
+  Part,
+} from '@google/genai';
 
 import { useLiveAPIContext } from '../../../contexts/LiveAPIContext';
 import {
@@ -58,6 +62,7 @@ export default function StreamingConsole() {
   const turns = useLogStore(state => state.turns);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showPopUp, setShowPopUp] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleClosePopUp = () => {
     setShowPopUp(false);
@@ -77,9 +82,7 @@ export default function StreamingConsole() {
         ],
       }));
 
-    // Using `any` for config to accommodate `speechConfig`, which is not in the
-    // current TS definitions but is used in the working reference example.
-    const config: any = {
+    const config: LiveConnectConfig = {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
@@ -132,12 +135,10 @@ export default function StreamingConsole() {
       }
     };
 
-    // FIX: The 'content' event provides a single LiveServerContent object.
-    // The function signature is updated to accept one argument, and groundingMetadata is extracted from it.
     const handleContent = (serverContent: LiveServerContent) => {
       const text =
         serverContent.modelTurn?.parts
-          ?.map((p: any) => p.text)
+          ?.map((p: Part) => p.text)
           .filter(Boolean)
           .join(' ') ?? '';
       const groundingChunks = serverContent.groundingMetadata?.groundingChunks;
@@ -187,7 +188,11 @@ export default function StreamingConsole() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [turns]);
+  }, [turns, searchQuery]);
+
+  const filteredTurns = turns.filter(turn =>
+    turn.text.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="transcription-container">
@@ -195,50 +200,80 @@ export default function StreamingConsole() {
       {turns.length === 0 ? (
         <WelcomeScreen />
       ) : (
-        <div className="transcription-view" ref={scrollRef}>
-          {turns.map((t, i) => (
-            <div
-              key={i}
-              className={`transcription-entry ${t.role} ${!t.isFinal ? 'interim' : ''
-                }`}
-            >
-              <div className="transcription-header">
-                <div className="transcription-source">
-                  {t.role === 'user'
-                    ? 'You'
-                    : t.role === 'agent'
-                      ? 'Agent'
-                      : 'System'}
+        <div className="console-content-wrapper">
+          <div className="search-bar-container">
+            <span className="icon">search</span>
+            <input
+              type="text"
+              placeholder="Search logs..."
+              className="search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search conversation logs"
+            />
+            {searchQuery && (
+              <button
+                className="clear-search-button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+              >
+                <span className="icon">close</span>
+              </button>
+            )}
+          </div>
+          <div className="transcription-view" ref={scrollRef}>
+            {filteredTurns.length > 0 ? (
+              filteredTurns.map((t, i) => (
+                <div
+                  key={i}
+                  className={`transcription-entry ${t.role} ${!t.isFinal ? 'interim' : ''
+                    }`}
+                >
+                  <div className="transcription-header">
+                    <div className="transcription-source">
+                      {t.role === 'user'
+                        ? 'You'
+                        : t.role === 'agent'
+                          ? 'Agent'
+                          : 'System'}
+                    </div>
+                    <div className="transcription-timestamp">
+                      {formatTimestamp(t.timestamp)}
+                    </div>
+                  </div>
+                  <div className="transcription-text-content">
+                    {renderContent(t.text)}
+                  </div>
+                  {t.groundingChunks && t.groundingChunks.length > 0 && (
+                    <div className="grounding-chunks">
+                      <strong>Sources:</strong>
+                      <ul>
+                        {t.groundingChunks
+                          .filter(chunk => chunk.web)
+                          .map((chunk, index) => (
+                            <li key={index}>
+                              <a
+                                href={chunk.web!.uri}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {chunk.web!.title || chunk.web!.uri}
+                              </a>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-                <div className="transcription-timestamp">
-                  {formatTimestamp(t.timestamp)}
+              ))
+            ) : (
+              searchQuery && (
+                <div className="no-results-message">
+                  No logs found for "{searchQuery}"
                 </div>
-              </div>
-              <div className="transcription-text-content">
-                {renderContent(t.text)}
-              </div>
-              {t.groundingChunks && t.groundingChunks.length > 0 && (
-                <div className="grounding-chunks">
-                  <strong>Sources:</strong>
-                  <ul>
-                    {t.groundingChunks
-                      .filter(chunk => chunk.web)
-                      .map((chunk, index) => (
-                        <li key={index}>
-                          <a
-                            href={chunk.web!.uri}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {chunk.web!.title || chunk.web!.uri}
-                          </a>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ))}
+              )
+            )}
+          </div>
         </div>
       )}
     </div>

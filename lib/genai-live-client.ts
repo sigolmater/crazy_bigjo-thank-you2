@@ -69,7 +69,12 @@ export interface LiveClientEventTypes {
   outputTranscription: (text: string, isFinal: boolean) => void;
 }
 
-export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
+export class GenAILiveClient {
+  private emitter = new EventEmitter<LiveClientEventTypes>();
+
+  public on = this.emitter.on.bind(this.emitter);
+  public off = this.emitter.off.bind(this.emitter);
+
   public readonly model: string = DEFAULT_LIVE_API_MODEL;
 
   protected readonly client: GoogleGenAI;
@@ -86,7 +91,6 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
    * @param model - Optional model name to override the default model
    */
   constructor(apiKey: string, model?: string) {
-    super();
     if (model) this.model = model;
 
     this.client = new GoogleGenAI({
@@ -142,7 +146,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
 
   public send(parts: Part | Part[], turnComplete: boolean = true) {
     if (this._status !== 'connected' || !this.session) {
-      this.emit('error', new ErrorEvent('Client is not connected'));
+      this.emitter.emit('error', new ErrorEvent('Client is not connected'));
       return;
     }
     this.session.sendClientContent({ turns: parts, turnComplete });
@@ -151,7 +155,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
 
   public sendRealtimeInput(chunks: Array<{ mimeType: string; data: string }>) {
     if (this._status !== 'connected' || !this.session) {
-      this.emit('error', new ErrorEvent('Client is not connected'));
+      this.emitter.emit('error', new ErrorEvent('Client is not connected'));
       return;
     }
     chunks.forEach(chunk => {
@@ -176,7 +180,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
 
   public sendToolResponse(toolResponse: LiveClientToolResponse) {
     if (this._status !== 'connected' || !this.session) {
-      this.emit('error', new ErrorEvent('Client is not connected'));
+      this.emitter.emit('error', new ErrorEvent('Client is not connected'));
       return;
     }
     if (
@@ -193,17 +197,17 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
 
   protected onMessage(message: LiveServerMessage) {
     if (message.setupComplete) {
-      this.emit('setupcomplete');
+      this.emitter.emit('setupcomplete');
       return;
     }
     if (message.toolCall) {
       this.log('server.toolCall', message);
-      this.emit('toolcall', message.toolCall);
+      this.emitter.emit('toolcall', message.toolCall);
       return;
     }
     if (message.toolCallCancellation) {
       this.log('receive.toolCallCancellation', message);
-      this.emit('toolcallcancellation', message.toolCallCancellation);
+      this.emitter.emit('toolcallcancellation', message.toolCallCancellation);
       return;
     }
 
@@ -211,16 +215,15 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
       const { serverContent } = message;
       if (serverContent.interrupted) {
         this.log('receive.serverContent', 'interrupted');
-        this.emit('interrupted');
+        this.emitter.emit('interrupted');
         return;
       }
 
       if (serverContent.inputTranscription) {
-        this.emit(
+        this.emitter.emit(
           'inputTranscription',
           serverContent.inputTranscription.text,
-          // FIX: Property 'isFinal' does not exist on type 'Transcription'.
-          (serverContent.inputTranscription as any).isFinal ?? false,
+          serverContent.inputTranscription.isFinal ?? false,
         );
         this.log(
           'server.inputTranscription',
@@ -229,11 +232,10 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
       }
 
       if (serverContent.outputTranscription) {
-        this.emit(
+        this.emitter.emit(
           'outputTranscription',
           serverContent.outputTranscription.text,
-          // FIX: Property 'isFinal' does not exist on type 'Transcription'.
-          (serverContent.outputTranscription as any).isFinal ?? false,
+          serverContent.outputTranscription.isFinal ?? false,
         );
         this.log(
           'server.outputTranscription',
@@ -241,33 +243,54 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
         );
       }
 
-      if (serverContent.modelTurn) {
-        let parts: Part[] = serverContent.modelTurn.parts || [];
+      const hasModelTurn = !!serverContent.modelTurn?.parts?.length;
+      const hasGrounding = !!serverContent.groundingMetadata;
+
+      if (hasModelTurn || hasGrounding) {
+        const parts = serverContent.modelTurn?.parts || [];
 
         const audioParts = parts.filter(p =>
           p.inlineData?.mimeType?.startsWith('audio/pcm'),
         );
-        const base64s = audioParts.map(p => p.inlineData?.data);
         const otherParts = difference(parts, audioParts);
 
-        base64s.forEach(b64 => {
+        // Emit audio parts separately
+        audioParts.forEach(part => {
+          const b64 = part.inlineData?.data;
           if (b64) {
             const data = base64ToArrayBuffer(b64);
-            this.emit('audio', data);
+            this.emitter.emit('audio', data);
             this.log(`server.audio`, `buffer (${data.byteLength})`);
           }
         });
 
-        if (otherParts.length > 0) {
-          const content: LiveServerContent = { modelTurn: { parts: otherParts } };
-          this.emit('content', content);
-          this.log(`server.content`, message);
+        // Construct the content to emit, excluding audio parts but including everything else.
+        const contentToEmit: LiveServerContent = {
+          ...serverContent,
+        };
+
+        if (serverContent.modelTurn) {
+          contentToEmit.modelTurn = { parts: otherParts };
+        }
+
+        // Clean up empty modelTurn
+        if (
+          contentToEmit.modelTurn &&
+          contentToEmit.modelTurn.parts.length === 0
+        ) {
+          delete contentToEmit.modelTurn;
+        }
+
+        // Only emit if there's something left to emit
+        if (contentToEmit.modelTurn || contentToEmit.groundingMetadata) {
+          this.emitter.emit('content', contentToEmit);
+          this.log(`server.content`, contentToEmit);
         }
       }
 
       if (serverContent.turnComplete) {
         this.log('server.send', 'turnComplete');
-        this.emit('turncomplete');
+        this.emitter.emit('turncomplete');
       }
     }
   }
@@ -278,12 +301,12 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
 
     const message = `Could not connect to GenAI Live: ${e.message}`;
     this.log(`server.${e.type}`, message);
-    this.emit('error', e);
+    this.emitter.emit('error', e);
   }
 
   protected onOpen() {
     this._status = 'connected';
-    this.emit('open');
+    this.emitter.emit('open');
   }
 
   protected onClose(e: CloseEvent) {
@@ -301,7 +324,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
       `server.${e.type}`,
       `disconnected ${reason ? `with reason: ${reason}` : ``}`
     );
-    this.emit('close', e);
+    this.emitter.emit('close', e);
   }
 
   /**
@@ -310,7 +333,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
    * @param message - Log message
    */
   protected log(type: string, message: string | object) {
-    this.emit('log', {
+    this.emitter.emit('log', {
       type,
       message,
       date: new Date(),

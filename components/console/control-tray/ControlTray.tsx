@@ -7,6 +7,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -38,9 +39,7 @@ function ControlTray({ children }: ControlTrayProps) {
   const { client, connected, connect, disconnect } = useLiveAPIContext();
 
   useEffect(() => {
-    // FIX: Cannot find name 'connectButton'. Did you mean 'connectButtonRef'?
     if (!connected && connectButtonRef.current) {
-      // FIX: Cannot find name 'connectButton'. Did you mean 'connectButtonRef'?
       connectButtonRef.current.focus();
     }
   }, [connected]);
@@ -92,7 +91,7 @@ function ControlTray({ children }: ControlTrayProps) {
       tools,
       conversation: turns.map(turn => ({
         ...turn,
-        // Convert Date object to ISO string for JSON serialization
+        // Convert Date object to ISO
         timestamp: turn.timestamp.toISOString(),
       })),
     };
@@ -101,72 +100,47 @@ function ControlTray({ children }: ControlTrayProps) {
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     a.href = url;
-    a.download = `live-api-logs-${timestamp}.json`;
+    a.download = `log-${new Date().toISOString()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const micButtonTitle = connected
-    ? muted
-      ? 'Unmute microphone'
-      : 'Mute microphone'
-    : 'Connect and start microphone';
-
-  const connectButtonTitle = connected ? 'Stop streaming' : 'Start streaming';
-
   return (
-    <section className="control-tray">
-      <nav className={cn('actions-nav')}>
-        <button
-          className={cn('action-button mic-button')}
-          onClick={handleMicClick}
-          title={micButtonTitle}
-        >
-          {!muted ? (
-            <span className="material-symbols-outlined filled">mic</span>
-          ) : (
-            <span className="material-symbols-outlined filled">mic_off</span>
-          )}
-        </button>
-        <button
-          className={cn('action-button')}
-          onClick={handleExportLogs}
-          aria-label="Export Logs"
-          title="Export session logs"
-        >
-          <span className="icon">download</span>
-        </button>
-        <button
-          className={cn('action-button')}
-          onClick={useLogStore.getState().clearTurns}
-          aria-label="Reset Chat"
-          title="Reset session logs"
-        >
-          <span className="icon">refresh</span>
-        </button>
-        {children}
-      </nav>
-
-      <div className={cn('connection-container', { connected })}>
-        <div className="connection-button-container">
-          <button
-            ref={connectButtonRef}
-            className={cn('action-button connect-toggle', { connected })}
-            onClick={connected ? disconnect : connect}
-            title={connectButtonTitle}
-          >
-            <span className="material-symbols-outlined filled">
-              {connected ? 'pause' : 'play_arrow'}
-            </span>
-          </button>
-        </div>
-        <span className="text-indicator">Streaming</span>
-      </div>
-    </section>
+    <div className="control-tray">
+      {children}
+      <button
+        ref={connectButtonRef}
+        className={cn('action-button', 'mic-button', { connected, muted })}
+        onClick={handleMicClick}
+        aria-label={
+          connected
+            ? muted
+              ? 'Unmute microphone'
+              : 'Mute microphone'
+            : 'Connect'
+        }
+      >
+        <span className="icon">{connected && !muted ? 'mic' : 'mic_off'}</span>
+      </button>
+      <button
+        className="action-button disconnect-button"
+        onClick={disconnect}
+        disabled={!connected}
+        aria-label="Disconnect"
+      >
+        <span className="icon">cancel</span>
+      </button>
+      <button
+        className="action-button export-logs-button"
+        onClick={handleExportLogs}
+        aria-label="Export Logs"
+      >
+        <span className="icon">save</span>
+      </button>
+    </div>
   );
 }
 
