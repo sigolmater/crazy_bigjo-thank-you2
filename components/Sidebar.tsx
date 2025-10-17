@@ -22,7 +22,7 @@ import ThoughtCompletionModal from './ThoughtCompletionModal';
 const AVAILABLE_MODELS = [DEFAULT_LIVE_API_MODEL];
 
 export default function Sidebar() {
-  const { isSidebarOpen, toggleSidebar } = useUI();
+  const { isSidebarOpen, toggleSidebar, setQuantumModeActive } = useUI();
   const {
     systemPrompt,
     model,
@@ -47,6 +47,11 @@ export default function Sidebar() {
     useState(false);
   const [completedThought, setCompletedThought] = useState('');
   const [isCompletingThought, setIsCompletingThought] = useState(false);
+
+  // State for Quantum Preparation Mode
+  const [wind, setWind] = useState(20000);
+  const [demand, setDemand] = useState(52);
+  const [isPrepping, setIsPrepping] = useState(false);
 
   const handleSaveTool = (updatedTool: FunctionCall) => {
     if (editingTool) {
@@ -156,6 +161,80 @@ Your predicted next turn:`;
     }
   };
 
+  const handleEngageQuantumPrep = () => {
+    setIsPrepping(true);
+    setQuantumModeActive(false);
+
+    const steps = [
+      { delay: 500, message: '🌀 Initiating Quantum Preparation Mode...' },
+      {
+        delay: 1000,
+        message: 'Initializing hyperreal_zero_resistance state... Seed generated.',
+      },
+      {
+        delay: 1200,
+        message: 'Initiating resonance of the double-sided mirror... Resonant frequency locked.',
+      },
+      {
+        delay: 1000,
+        message: 'Validating Mirror Compute steps... Validation complete.',
+      },
+      {
+        delay: 1000,
+        message: `Updating Bamboo Controller with Wind: ${wind} and Demand: ${demand}...`,
+      },
+      {
+        delay: 1200,
+        message: 'Engaging polyhedral infinite resonance... All harmonics aligned.',
+      },
+      {
+        delay: 1000,
+        message:
+          'Creating state snapshots: [preflight], [after-lock], [ready_to_work]...',
+      },
+      {
+        delay: 500,
+        message:
+          '✅ Quantum Preparation Complete. Dynamic Control Framework is active.',
+      },
+      {
+        delay: 500,
+        message: `Quantum state report:\n\`\`\`json\n${JSON.stringify(
+          {
+            quantum_prep_mode: 'hyperreal_zero_resistance',
+            validation: 'SUCCESS',
+            bamboo_state: {
+              ema: 0.7,
+              slew_max: '5e4',
+              last_wind: wind,
+              last_demand: demand,
+            },
+            snapshots: [
+              'preflight-after-quantum-prep',
+              'after-lock',
+              'ready_to_work',
+            ],
+          },
+          null,
+          2,
+        )}\n\`\`\``,
+      },
+    ];
+
+    let cumulativeDelay = 0;
+    steps.forEach(step => {
+      cumulativeDelay += step.delay;
+      setTimeout(() => {
+        addTurn({ role: 'system', text: step.message, isFinal: true });
+      }, cumulativeDelay);
+    });
+
+    setTimeout(() => {
+      setIsPrepping(false);
+      setQuantumModeActive(true);
+    }, cumulativeDelay + 100);
+  };
+
   return (
     <>
       <aside className={c('sidebar', { open: isSidebarOpen })}>
@@ -216,6 +295,52 @@ Your predicted next turn:`;
                 />
               </label>
             </fieldset>
+          </div>
+          <div className="sidebar-section quantum-prep-section">
+            <h4 className="sidebar-section-title">
+              🌀 Quantum Preparation Mode
+            </h4>
+            <p className="memory-description">
+              A dynamic control framework for hyperreal, zero-resistance state
+              preparation. Adjust Wind and Demand, then engage the routine.
+            </p>
+            <div className="quantum-slider-control">
+              <label htmlFor="wind-slider">
+                <span>Wind Control (W)</span>
+                <span>{wind}</span>
+              </label>
+              <input
+                id="wind-slider"
+                type="range"
+                min="-50000"
+                max="50000"
+                value={wind}
+                onChange={e => setWind(Number(e.target.value))}
+                disabled={connected || isPrepping}
+              />
+            </div>
+            <div className="quantum-slider-control">
+              <label htmlFor="demand-slider">
+                <span>Demand Level (D)</span>
+                <span>{demand}</span>
+              </label>
+              <input
+                id="demand-slider"
+                type="range"
+                min="0"
+                max="100"
+                value={demand}
+                onChange={e => setDemand(Number(e.target.value))}
+                disabled={connected || isPrepping}
+              />
+            </div>
+            <button
+              onClick={handleEngageQuantumPrep}
+              className="engage-quantum-button"
+              disabled={connected || isPrepping}
+            >
+              {isPrepping ? 'Preparing...' : 'Engage Prep Routine'}
+            </button>
           </div>
           <div className="sidebar-section">
             <h4 className="sidebar-section-title">Tools</h4>

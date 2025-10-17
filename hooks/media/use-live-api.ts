@@ -11,7 +11,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law of or agreed to in writing, software
+ * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
@@ -52,6 +52,7 @@ export function useLiveApi({
 }): UseLiveApiResults {
   const { model } = useSettings();
   const client = useMemo(() => new GenAILiveClient(apiKey, model), [apiKey, model]);
+  const { setQuantumModeActive } = useUI();
 
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
 
@@ -96,7 +97,8 @@ export function useLiveApi({
   const disconnect = useCallback(async () => {
     client.disconnect();
     setConnected(false);
-  }, [setConnected, client]);
+    setQuantumModeActive(false);
+  }, [setConnected, client, setQuantumModeActive]);
 
   const generateText = useCallback(
     async (prompt: string): Promise<string> => {
@@ -122,6 +124,7 @@ export function useLiveApi({
 
     const onClose = () => {
       setConnected(false);
+      setQuantumModeActive(false);
     };
 
     const stopAudioStreamer = () => {
@@ -273,7 +276,7 @@ export function useLiveApi({
       client.off('toolcall', onToolCall);
       client.off('inputTranscription', onInputTranscription);
     };
-  }, [client, connected, connect, disconnect]);
+  }, [client, connected, connect, disconnect, setQuantumModeActive]);
 
   return {
     client,

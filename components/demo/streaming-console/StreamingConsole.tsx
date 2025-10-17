@@ -17,7 +17,7 @@ import {
   useSettings,
   useLogStore,
   useTools,
-  ConversationTurn,
+  useUI,
 } from '@/lib/state';
 
 const formatTimestamp = (date: Date) => {
@@ -52,6 +52,31 @@ const renderContent = (text: string) => {
       return boldPart;
     });
   });
+};
+
+/**
+ * A visual component representing a resonating regular polyhedron (icosahedron).
+ * Appears when Quantum Preparation Mode is active.
+ */
+const QuantumPolyhedron = () => {
+  const isQuantumModeActive = useUI(state => state.isQuantumModeActive);
+
+  if (!isQuantumModeActive) {
+    return null;
+  }
+
+  // An icosahedron has 20 faces. We create 20 divs for them.
+  const faces = Array.from({ length: 20 }).map((_, i) => (
+    <div key={i} className={`face face-${i + 1}`} />
+  ));
+
+  return (
+    <div className="quantum-polyhedron-container" aria-hidden="true">
+      <div className="polyhedron-scene">
+        <div className="polyhedron">{faces}</div>
+      </div>
+    </div>
+  );
 };
 
 export default function StreamingConsole() {
@@ -163,6 +188,7 @@ export default function StreamingConsole() {
     <div className="streaming-console-inner" ref={scrollRef}>
       {showPopUp && <PopUp onClose={() => setShowPopUp(false)} />}
       {!hasTurns && !showPopUp && <WelcomeScreen />}
+      <QuantumPolyhedron />
       {turns.map((turn, index) => (
         <div
           key={`${turn.role}-${turn.timestamp.toISOString()}-${index}`}

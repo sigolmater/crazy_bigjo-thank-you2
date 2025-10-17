@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import cn from 'classnames';
 import ControlTray from './components/console/control-tray/ControlTray';
 import ErrorScreen from './components/demo/ErrorScreen';
 import StreamingConsole from './components/demo/streaming-console/StreamingConsole';
@@ -25,6 +26,7 @@ import StreamingConsole from './components/demo/streaming-console/StreamingConso
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import { LiveAPIProvider } from './contexts/LiveAPIContext';
+import { useUI } from './lib/state';
 
 const API_KEY = process.env.API_KEY as string;
 if (typeof API_KEY !== 'string') {
@@ -38,8 +40,10 @@ if (typeof API_KEY !== 'string') {
  * Manages video streaming state and provides controls for webcam/screen capture.
  */
 function App() {
+  const isQuantumModeActive = useUI(state => state.isQuantumModeActive);
+
   return (
-    <div className="App">
+    <div className={cn('App', { 'quantum-mode-active': isQuantumModeActive })}>
       <LiveAPIProvider apiKey={API_KEY}>
         <ErrorScreen />
         <Header />

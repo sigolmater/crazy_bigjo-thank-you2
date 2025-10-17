@@ -69,9 +69,14 @@ export const useSettings = create<{
 export const useUI = create<{
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
+  isQuantumModeActive: boolean;
+  setQuantumModeActive: (isActive: boolean) => void;
 }>(set => ({
   isSidebarOpen: true,
   toggleSidebar: () => set(state => ({ isSidebarOpen: !state.isSidebarOpen })),
+  isQuantumModeActive: false,
+  setQuantumModeActive: (isActive: boolean) =>
+    set({ isQuantumModeActive: isActive }),
 }));
 
 /**
